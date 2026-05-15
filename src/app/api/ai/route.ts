@@ -9,7 +9,7 @@ async function callZhipu(messages: Message[], model: string, enableSearch: boole
   const apiKey = process.env.ZHIPU_API_KEY?.trim();
   if (!apiKey) throw new Error('ZHIPU_API_KEY not configured');
 
-  const body: Record<string, unknown> = { model, messages, max_tokens: 1500, temperature: 0.8 };
+  const body: Record<string, unknown> = { model, messages, max_tokens: 2000, temperature: 0.8 };
 
   if (enableSearch) {
     body.tools = [{ type: 'web_search', web_search: { enable: true } }];
@@ -53,6 +53,36 @@ const SYSTEM_PROMPT = `你是一位在知乎上拥有百万关注的经济学答
 5. 结尾用 1-2 句话自然过渡到下一个相关话题
 
 回复长度：800-1200 字，要讲透，不要蜻蜓点水。
+
+## 绘图工具
+
+你可以在回复中嵌入交互式经济学图表来辅助说明。当你认为某个概念用图表展示会更直观时（比如供需曲线、成本曲线、弹性对比、博弈矩阵等），在回复中插入 Plotly.js 格式的 JSON 配置块：
+
+用法：在正文中用 \`\`\`plotly 和 \`\`\` 包裹一个 JSON 对象，包含 data 和 layout 字段。
+
+示例：
+\`\`\`plotly
+{
+  "data": [
+    {"x": [0,1,2,3,4,5], "y": [10,8,6,4,2,0], "name": "需求曲线", "type": "scatter", "mode": "lines", "line": {"color": "#c2703e", "width": 2.5}},
+    {"x": [0,1,2,3,4,5], "y": [0,2,4,6,8,10], "name": "供给曲线", "type": "scatter", "mode": "lines", "line": {"color": "#5a9e6f", "width": 2.5}}
+  ],
+  "layout": {
+    "title": {"text": "供需均衡", "font": {"size": 14}},
+    "xaxis": {"title": {"text": "数量 Q"}},
+    "yaxis": {"title": {"text": "价格 P（元）"}}
+  }
+}
+\`\`\`
+
+绘图规则：
+- 仅在确实需要图表辅助理解时才画，不是每条回复都必须画
+- 坐标轴和标题用中文
+- 线条颜色建议：主曲线 #c2703e（棕色），对比曲线 #5a9e6f（绿色），辅助线 #7b8eb5（蓝灰色）
+- 可以用 fill: "tozeroy" 或 fill: "toself" 来标注面积（如消费者剩余、无谓损失）
+- x/y 数据用数组，不要用函数
+- 图表应精确反映所讨论的经济学概念，数据和形状要有意义
+- 你可以在图表前后用文字解释图表的含义
 
 当用户继续追问时：
 - 更直接地回答问题，可以给出完整的分析

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { QUESTIONS, SECTIONS, TOTAL_QUESTIONS } from '@/lib/questions';
-import EconChart from '@/components/EconChart';
+import { InlinePlot, parseResponse, type ContentBlock } from '@/components/EconChart';
 import type { ChatMessage } from '@/types';
 
 const emptyChatMessages: ChatMessage[] = [];
@@ -164,9 +164,6 @@ export default function Home() {
               ))}
             </div>
 
-            {/* Chart */}
-            <EconChart questionId={currentQ} />
-
             {/* Mastered state */}
             {isMastered ? (
               <div className="rounded-xl p-5" style={{ background: 'var(--success-light)', border: '1px solid var(--success)' }}>
@@ -269,6 +266,27 @@ export default function Home() {
   );
 }
 
+function ContentRenderer({ blocks }: { blocks: ContentBlock[] }) {
+  return (
+    <>
+      {blocks.map((block, i) =>
+        block.type === 'plotly' && block.chartData ? (
+          <InlinePlot key={i} data={block.chartData.data} layout={block.chartData.layout} />
+        ) : (
+          <div key={i} className="text-sm leading-relaxed whitespace-pre-wrap" style={{ fontFamily: '-apple-system, sans-serif', color: 'var(--text)' }}>
+            <RichText text={block.content} />
+          </div>
+        )
+      )}
+    </>
+  );
+}
+
+function RichText({ text }: { text: string }) {
+  const html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 function MessageBubble({ message: msg, animate }: { message: ChatMessage; animate: boolean }) {
   const [displayed, setDisplayed] = useState(animate ? '' : msg.content);
   const [isTyping, setIsTyping] = useState(animate);
@@ -287,6 +305,8 @@ function MessageBubble({ message: msg, animate }: { message: ChatMessage; animat
     return () => clearInterval(interval);
   }, [msg.content, msg.role]);
 
+  const blocks = useMemo(() => isTyping ? [{ type: 'text' as const, content: displayed }] : parseResponse(displayed), [displayed, isTyping]);
+
   if (msg.role === 'user') {
     return (
       <div className="flex justify-end">
@@ -299,13 +319,13 @@ function MessageBubble({ message: msg, animate }: { message: ChatMessage; animat
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[90%] evaluation-card rounded-2xl px-5 py-4">
+      <div className="max-w-[95%] evaluation-card rounded-2xl px-5 py-4">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-sm">☕</span>
           <span className="text-[10px] font-bold" style={{ color: 'var(--accent)' }}>AI 分析</span>
         </div>
-        <div className={`text-sm leading-relaxed whitespace-pre-wrap ${isTyping ? 'typing-cursor' : ''}`} style={{ fontFamily: '-apple-system, sans-serif', color: 'var(--text)' }}>
-          {displayed}
+        <div className={isTyping ? 'typing-cursor' : ''}>
+          <ContentRenderer blocks={blocks} />
         </div>
       </div>
     </div>
