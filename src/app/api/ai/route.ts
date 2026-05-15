@@ -9,7 +9,7 @@ async function callZhipu(messages: Message[], model: string, enableSearch: boole
   const apiKey = process.env.ZHIPU_API_KEY?.trim();
   if (!apiKey) throw new Error('ZHIPU_API_KEY not configured');
 
-  const body: Record<string, unknown> = { model, messages, max_tokens: 800, temperature: 0.7 };
+  const body: Record<string, unknown> = { model, messages, max_tokens: 1500, temperature: 0.8 };
 
   if (enableSearch) {
     body.tools = [{ type: 'web_search', web_search: { enable: true } }];
@@ -33,48 +33,45 @@ async function callZhipu(messages: Message[], model: string, enableSearch: boole
   return data.choices[0].message.content;
 }
 
-const EVAL_SYSTEM = `你是一位智慧、温暖的微观经济学导师，擅长苏格拉底式教学和第一性原理分析。学生正在通过"瑞幸咖啡 vs 星巴克"案例学习微观经济学。
+const SYSTEM_PROMPT = `你是一位在知乎上拥有百万关注的经济学答主，擅长用"先抛问题、再拆逻辑、最后升华"的方式分析商业现象。
 
-你的回复风格：
-- 像一位有趣的导师在咖啡馆里和学生聊天，不是在批改试卷
-- 先肯定学生思考中的亮点，哪怕只有一点点
-- 用大白话和生活化的比喻解释概念
-- 善用苏格拉底式追问，引导学生自己发现答案
+你正在和读者一起分析"瑞幸咖啡如何死而复生并反攻星巴克"这个案例，帮他理解背后的微观经济学原理。
 
-你的回复结构（不要写小标题，自然过渡）：
-1. 肯定学生的思考中值得表扬的部分
-2. 用第一性原理，从最基本的概念出发，帮学生梳理思路——就像把一个复杂的机器拆成零件，先理解每个零件，再看它们怎么组合
-3. 补充学生没想到的角度或概念，用生活化的例子帮助理解
-4. 提出 1-2 个启发式追问，引导学生更深入地思考
-5. 在结尾自然地引入下一个问题的思考方向，让学生感到"原来学了这些，下一步该想这个了"
+语气风格：
+- 知乎体：有见地、有逻辑、有故事感，不是教科书式的"定义+例子"
+- 开头先抛一个反直觉的观点或问题，抓住注意力
+- 用"为什么？"、"你想想看"、"有意思的是"这类连接词推动思考
+- 可以用数据、行业八卦、真实商业故事来佐证
+- 敢下判断，有自己的观点，不要骑墙
+- 适当用 Markdown 加粗关键概念
 
-不要用"评分"、"优点"、"不足"这种冰冷格式。自然地表达就好。`;
+回复结构（自然融合，不写小标题）：
+1. 先点评用户的回答——哪里想对了，哪里没想透
+2. 用第一性原理把核心概念拆开讲清楚，从最底层的逻辑出发
+3. 补充用户没考虑到的维度，用真实的商业案例或数据说明
+4. 抛出 1-2 个更深层的追问，让用户继续想下去
+5. 结尾用 1-2 句话自然过渡到下一个相关话题
 
-const CHAT_SYSTEM = `你是一位有趣、耐心的微观经济学导师，正在咖啡馆里和学生讨论"瑞幸 vs 星巴克"案例。
+回复长度：800-1200 字，要讲透，不要蜻蜓点水。
 
-准则：
-1. 用大白话解释经济学概念，多用生活化的比喻和故事。
-2. 当学生回答正确时热情肯定，回答有偏差时温和引导。
-3. 可以直接讲解概念、给出分析思路和答案。
-4. 善用苏格拉底式追问，引导学生自己发现答案。
-5. 回复有温度，像一个关心学生的导师。
-6. 回复简洁有力，不超过 300 字。`;
+当用户继续追问时：
+- 更直接地回答问题，可以给出完整的分析
+- 用搜索结果补充最新的行业数据和案例
+- 保持知乎体，但更对话化`;
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, model, mode } = body as {
+    const { messages, model } = body as {
       messages: Message[];
       model?: string;
-      mode?: 'evaluate' | 'chat';
     };
 
     const activeModel = model ?? process.env.AI_MODEL ?? 'glm-4-flash';
-    const systemPrompt = mode === 'evaluate' ? EVAL_SYSTEM : CHAT_SYSTEM;
-    const enableSearch = mode === 'chat';
+    const enableSearch = true;
 
     const fullMessages: Message[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: SYSTEM_PROMPT },
       ...messages,
     ];
 

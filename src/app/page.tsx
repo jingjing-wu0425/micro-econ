@@ -3,9 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { QUESTIONS, SECTIONS, TOTAL_QUESTIONS } from '@/lib/questions';
-import type { Evaluation, ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types';
 
-const emptyEvals: Evaluation[] = [];
 const emptyChatMessages: ChatMessage[] = [];
 
 export default function Home() {
@@ -16,7 +15,7 @@ export default function Home() {
   const getProgress = useStore((s) => s.getProgress);
   const setAnswer = useStore((s) => s.setAnswer);
   const setCurrentQ = useStore((s) => s.setCurrentQ);
-  const addEvaluation = useStore((s) => s.addEvaluation);
+  const addChatMessage = useStore((s) => s.addChatMessage);
   const setMastered = useStore((s) => s.setMastered);
   const nextQuestion = useStore((s) => s.nextQuestion);
   const setLoading = useStore((s) => s.setLoading);
@@ -27,9 +26,62 @@ export default function Home() {
   const question = QUESTIONS.find((q) => q.id === currentQ)!;
   const section = SECTIONS.find((s) => s.id === question.sectionId)!;
   const answer = answers[currentQ] ?? '';
-  const evals = useStore((s) => s.evaluations[currentQ]) ?? emptyEvals;
+  const messages = useStore((s) => s.chatMessages[currentQ]) ?? emptyChatMessages;
   const isMastered = mastered[currentQ] ?? false;
   const masteredCount = Object.values(mastered).filter(Boolean).length;
+  const hasSubmitted = messages.length > 0;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSubmit = async () => {
+    if (!answer.trim() || isLoading) return;
+    const userMsg: ChatMessage = { id: `u-${Date.now()}`, questionId: currentQ, role: 'user', content: answer, timestamp: new Date().toISOString() };
+    addChatMessage(currentQ, userMsg);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: `## 题目：${question.title}\n${question.body}\n\n## 核心概念：${question.keywords.join('、')}\n\n## 我的回答：\n${answer}` }],
+        }),
+      });
+      const data = await res.json();
+      addChatMessage(currentQ, { id: `a-${Date.now()}`, questionId: currentQ, role: 'assistant', content: data.response, timestamp: new Date().toISOString() });
+    } catch {
+      addChatMessage(currentQ, { id: `a-err-${Date.now()}`, questionId: currentQ, role: 'assistant', content: '⚠ 暂时不可用，请稍后重试。', timestamp: new Date().toISOString() });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFollowUp = async (text: string) => {
+    if (!text.trim() || isLoading) return;
+    const userMsg: ChatMessage = { id: `u-${Date.now()}`, questionId: currentQ, role: 'user', content: text, timestamp: new Date().toISOString() };
+    addChatMessage(currentQ, userMsg);
+    setLoading(true);
+    try {
+      const history = [...messages, userMsg].map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: `当前题目：${question.title}\n关键词：${question.keywords.join('、')}\n我的回答：${answer}\n\n${history.map((m) => `${m.role === 'user' ? '我' : '你'}：${m.content}`).join('\n')}` }],
+        }),
+      });
+      const data = await res.json();
+      addChatMessage(currentQ, { id: `a-${Date.now()}`, questionId: currentQ, role: 'assistant', content: data.response, timestamp: new Date().toISOString() });
+    } catch {
+      addChatMessage(currentQ, { id: `a-err-${Date.now()}`, questionId: currentQ, role: 'assistant', content: '⚠ 暂时不可用', timestamp: new Date().toISOString() });
+    } finally {
+      setLoading(false);
+      inputRef.current?.focus();
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
@@ -76,9 +128,7 @@ export default function Home() {
                         <button
                           key={q.id}
                           onClick={() => { setCurrentQ(q.id); setShowSidebar(false); }}
-                          className={`sidebar-link w-full text-left text-[11px] px-3 py-2 rounded-lg ${
-                            active ? 'font-semibold' : ''
-                          }`}
+                          className={`sidebar-link w-full text-left text-[11px] px-3 py-2 rounded-lg ${active ? 'font-semibold' : ''}`}
                           style={active ? { background: 'var(--accent-light)', color: 'var(--accent-dark)' } : done ? { color: 'var(--success)' } : { color: 'var(--text-light)' }}
                         >
                           {done ? '✓ ' : ''}{q.title}
@@ -94,7 +144,7 @@ export default function Home() {
 
         {/* Main */}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-6 py-10">
+          <div className="max-w-2xl mx-auto px-6 py-10" ref={scrollRef}>
             {/* Section label */}
             <div className="flex items-center gap-2 mb-6">
               <span className="inline-block w-8 h-[2px] rounded" style={{ background: 'var(--accent)' }} />
@@ -113,7 +163,7 @@ export default function Home() {
               ))}
             </div>
 
-            {/* Answer */}
+            {/* Mastered state */}
             {isMastered ? (
               <div className="rounded-xl p-5" style={{ background: 'var(--success-light)', border: '1px solid var(--success)' }}>
                 <div className="text-xs font-bold mb-2" style={{ color: 'var(--success)' }}>已掌握 ✓</div>
@@ -121,6 +171,7 @@ export default function Home() {
               </div>
             ) : (
               <>
+                {/* Answer textarea */}
                 <textarea
                   value={answer}
                   onChange={(e) => setAnswer(currentQ, e.target.value)}
@@ -130,71 +181,56 @@ export default function Home() {
                 />
                 <div className="mt-4">
                   <button
-                    onClick={async () => {
-                      if (!answer.trim() || isLoading) return;
-                      setLoading(true);
-                      try {
-                        const res = await fetch('/api/ai', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            mode: 'evaluate',
-                            messages: [
-                              { role: 'user', content: `## 题目：${question.title}\n${question.body}\n\n## 核心概念：${question.keywords.join('、')}\n\n## 学生回答：\n${answer}` },
-                            ],
-                          }),
-                        });
-                        const data = await res.json();
-                        addEvaluation(currentQ, {
-                          id: `e-${Date.now()}`,
-                          questionId: currentQ,
-                          score: 0,
-                          feedback: data.response,
-                          timestamp: new Date().toISOString(),
-                        });
-                      } catch {
-                        addEvaluation(currentQ, {
-                          id: `e-err-${Date.now()}`,
-                          questionId: currentQ,
-                          score: 0,
-                          feedback: '⚠ 评估暂时不可用，请稍后重试。',
-                          timestamp: new Date().toISOString(),
-                        });
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
+                    onClick={handleSubmit}
                     disabled={!answer.trim() || isLoading}
                     className="px-6 py-2.5 text-white text-sm font-semibold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ background: 'var(--accent)' }}
                   >
-                    {isLoading ? '思考中...' : '提交回答'}
+                    {isLoading && !hasSubmitted ? 'AI 分析中...' : '提交回答'}
                   </button>
                 </div>
               </>
             )}
 
-            {/* Evaluations */}
-            {evals.length > 0 && (
-              <div className="mt-8 space-y-4">
-                {evals.map((ev) => (
-                  <div key={ev.id} className="evaluation-card rounded-xl p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-lg">📖</span>
-                      <span className="text-xs font-bold" style={{ color: 'var(--accent)' }}>导师点评</span>
-                    </div>
-                    <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ fontFamily: '-apple-system, sans-serif' }}>{ev.feedback}</div>
-                  </div>
+            {/* Unified message thread */}
+            {messages.length > 0 && !isMastered && (
+              <div className="mt-8 space-y-5">
+                {messages.map((msg, idx) => (
+                  <MessageBubble key={msg.id} message={msg} animate={idx === messages.length - 1 && msg.role === 'assistant'} />
                 ))}
+                {isLoading && (
+                  <div className="flex items-center gap-2 px-1">
+                    <div className="w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+                    <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>AI 分析中...</span>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Chat */}
-            {!isMastered && evals.length > 0 && <ChatPanel questionId={currentQ} />}
+            {/* Follow-up input */}
+            {hasSubmitted && !isMastered && (
+              <div className="mt-6 flex gap-3">
+                <input
+                  ref={inputRef}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { const v = (e.target as HTMLInputElement).value; handleFollowUp(v); (e.target as HTMLInputElement).value = ''; } }}
+                  placeholder="继续追问或补充你的想法..."
+                  className="flex-1 text-sm px-4 py-2.5 rounded-xl"
+                  style={{ border: '1px solid var(--border)', background: 'var(--surface)', fontFamily: '-apple-system, sans-serif' }}
+                />
+                <button
+                  onClick={() => { const v = inputRef.current?.value ?? ''; if (v.trim()) { handleFollowUp(v); if (inputRef.current) inputRef.current.value = ''; } }}
+                  disabled={isLoading}
+                  className="px-5 py-2.5 text-white text-sm font-semibold rounded-xl disabled:opacity-40"
+                  style={{ background: 'var(--accent)' }}
+                >
+                  追问
+                </button>
+              </div>
+            )}
 
-            {/* Action buttons */}
-            {!isMastered && evals.length > 0 && (
-              <div className="mt-8">
+            {/* Master button */}
+            {hasSubmitted && !isMastered && (
+              <div className="mt-6">
                 <button
                   onClick={() => setMastered(currentQ)}
                   className="px-6 py-2.5 text-white text-sm font-semibold rounded-xl transition-all"
@@ -204,6 +240,7 @@ export default function Home() {
                 </button>
               </div>
             )}
+
             {isMastered && currentQ < TOTAL_QUESTIONS && (
               <button
                 onClick={() => nextQuestion()}
@@ -228,86 +265,45 @@ export default function Home() {
   );
 }
 
-function ChatPanel({ questionId }: { questionId: number }) {
-  const messages = useStore((s) => s.chatMessages[questionId]) ?? emptyChatMessages;
-  const isLoading = useStore((s) => s.isLoading);
-  const addChatMessage = useStore((s) => s.addChatMessage);
-  const removeChatMessage = useStore((s) => s.removeChatMessage);
-  const setLoading = useStore((s) => s.setLoading);
-  const answers = useStore((s) => s.answers);
-  const [input, setInput] = useState('');
-  const [expanded, setExpanded] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+function MessageBubble({ message: msg, animate }: { message: ChatMessage; animate: boolean }) {
+  const [displayed, setDisplayed] = useState(animate ? '' : msg.content);
+  const [isTyping, setIsTyping] = useState(animate);
+  const hasAnimated = useRef(false);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+    if (msg.role === 'user' || hasAnimated.current) { setDisplayed(msg.content); return; }
+    hasAnimated.current = true;
+    setIsTyping(true);
+    let i = 0;
+    setDisplayed('');
+    const interval = setInterval(() => {
+      if (i < msg.content.length) { setDisplayed(msg.content.slice(0, i + 1)); i++; }
+      else { setIsTyping(false); clearInterval(interval); }
+    }, 12);
+    return () => clearInterval(interval);
+  }, [msg.content, msg.role]);
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || isLoading) return;
-    if (!expanded) setExpanded(true);
-    const userMsg: ChatMessage = { id: `u-${Date.now()}`, questionId, role: 'user', content: text, timestamp: new Date().toISOString() };
-    addChatMessage(questionId, userMsg);
-    setInput('');
-    setLoading(true);
-    try {
-      const q = QUESTIONS.find((q) => q.id === questionId)!;
-      const history = [...messages, userMsg].map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'chat',
-          messages: [{ role: 'user', content: `当前题目：${q.title}\n关键词：${q.keywords.join('、')}\n我的回答：${answers[questionId] ?? ''}\n\n${history.map((m) => `${m.role === 'user' ? '学生' : '导师'}：${m.content}`).join('\n')}` }],
-        }),
-      });
-      const data = await res.json();
-      addChatMessage(questionId, { id: `a-${Date.now()}`, questionId, role: 'assistant', content: data.response, timestamp: new Date().toISOString() });
-    } catch {
-      addChatMessage(questionId, { id: `a-err-${Date.now()}`, questionId, role: 'assistant', content: '⚠ 对话暂时不可用', timestamp: new Date().toISOString() });
-    } finally {
-      setLoading(false);
-      inputRef.current?.focus();
-    }
-  };
+  if (msg.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap" style={{ background: 'var(--accent-light)', color: 'var(--text)', fontFamily: '-apple-system, sans-serif' }}>
+          {displayed}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="mt-6">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-xs font-semibold transition-colors"
-        style={{ color: 'var(--accent)' }}
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-        {expanded ? '收起对话' : '和导师继续讨论'}
-      </button>
-
-      {expanded && (
-        <div className="mt-3 rounded-xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <div ref={scrollRef} className="max-h-64 overflow-y-auto px-4 py-3 space-y-2">
-            {messages.length === 0 && <p className="text-xs text-center py-3" style={{ color: 'var(--text-light)' }}>有问题？和导师聊聊 ☕</p>}
-            {messages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} group`}>
-                <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs leading-relaxed`} style={msg.role === 'user' ? { background: 'var(--accent-light)', color: 'var(--text)' } : { background: 'var(--bg)', color: 'var(--text)' }}>
-                  <p className="whitespace-pre-wrap" style={{ fontFamily: '-apple-system, sans-serif' }}>{msg.content}</p>
-                </div>
-                <button onClick={() => removeChatMessage(questionId, msg.id)} className="ml-1 self-center opacity-0 group-hover:opacity-100 transition-all" style={{ color: 'var(--text-light)' }}>
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-            ))}
-            {isLoading && <div className="flex items-center gap-2"><div className="w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} /><span className="text-[10px]" style={{ color: 'var(--text-light)' }}>思考中...</span></div>}
-          </div>
-          <div className="flex gap-2 px-4 py-3 border-t" style={{ borderColor: 'var(--border)' }}>
-            <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="继续提问..." className="flex-1 text-xs px-3 py-2 rounded-lg" style={{ border: '1px solid var(--border)', background: 'var(--bg)', fontFamily: '-apple-system, sans-serif' }} />
-            <button onClick={handleSend} disabled={!input.trim() || isLoading} className="px-4 py-2 text-xs font-bold text-white rounded-lg disabled:opacity-40" style={{ background: 'var(--accent)' }}>发送</button>
-          </div>
+    <div className="flex justify-start">
+      <div className="max-w-[90%] evaluation-card rounded-2xl px-5 py-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm">☕</span>
+          <span className="text-[10px] font-bold" style={{ color: 'var(--accent)' }}>AI 分析</span>
         </div>
-      )}
+        <div className={`text-sm leading-relaxed whitespace-pre-wrap ${isTyping ? 'typing-cursor' : ''}`} style={{ fontFamily: '-apple-system, sans-serif', color: 'var(--text)' }}>
+          {displayed}
+        </div>
+      </div>
     </div>
   );
 }
