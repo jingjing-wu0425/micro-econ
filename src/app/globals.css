@@ -1,21 +1,24 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f8f9fa;
+  --bg: #faf8f5;
   --surface: #ffffff;
-  --border: #e5e7eb;
-  --text: #1f2937;
-  --text-light: #6b7280;
-  --accent: #2563eb;
-  --accent-light: #dbeafe;
-  --success: #10b981;
-  --warn: #f59e0b;
+  --surface-warm: #fefcf9;
+  --border: #e8e2d9;
+  --text: #2d2a26;
+  --text-light: #8a8279;
+  --accent: #c2703e;
+  --accent-light: #f5e6d8;
+  --accent-dark: #a35a2e;
+  --success: #5a9e6f;
+  --success-light: #e8f5ec;
+  --gold: #d4a853;
 }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Georgia', 'Noto Serif SC', serif;
 }
 
 .question-body strong {
@@ -37,4 +40,23 @@ textarea:focus, input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.sidebar-link {
+  transition: all 0.2s;
+}
+.sidebar-link:hover {
+  background: var(--accent-light);
+}
+
+.evaluation-card {
+  background: linear-gradient(135deg, var(--surface-warm) 0%, var(--surface) 100%);
+  border-left: 3px solid var(--accent);
+}
+
+.progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.3s;
 }
