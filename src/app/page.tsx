@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { QUESTIONS, SECTIONS, TOTAL_QUESTIONS } from '@/lib/questions';
+import EconChart from '@/components/EconChart';
 import type { ChatMessage } from '@/types';
 
 const emptyChatMessages: ChatMessage[] = [];
@@ -162,6 +163,9 @@ export default function Home() {
                 <span key={kw} className="text-[10px] px-2.5 py-1 rounded-full" style={{ background: 'var(--accent-light)', color: 'var(--accent-dark)' }}>{kw}</span>
               ))}
             </div>
+
+            {/* Chart */}
+            <EconChart questionId={currentQ} />
 
             {/* Mastered state */}
             {isMastered ? (
