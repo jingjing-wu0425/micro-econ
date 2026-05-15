@@ -194,12 +194,12 @@ export default function Home() {
             )}
 
             {/* Unified message thread */}
-            {messages.length > 0 && !isMastered && (
+            {messages.length > 0 && (
               <div className="mt-8 space-y-5">
                 {messages.map((msg, idx) => (
-                  <MessageBubble key={msg.id} message={msg} animate={idx === messages.length - 1 && msg.role === 'assistant'} />
+                  <MessageBubble key={msg.id} message={msg} animate={!isMastered && idx === messages.length - 1 && msg.role === 'assistant'} />
                 ))}
-                {isLoading && (
+                {!isMastered && isLoading && (
                   <div className="flex items-center gap-2 px-1">
                     <div className="w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
                     <span className="text-[11px]" style={{ color: 'var(--text-light)' }}>AI 分析中...</span>
@@ -233,7 +233,13 @@ export default function Home() {
             {hasSubmitted && !isMastered && (
               <div className="mt-6">
                 <button
-                  onClick={() => setMastered(currentQ)}
+                  onClick={() => {
+                    const userMsgs = [...messages].filter((m) => m.role === 'user').map((m) => m.content);
+                    if (userMsgs.length > 0 && userMsgs[0] !== answer) {
+                      setAnswer(currentQ, userMsgs.join('\n\n'));
+                    }
+                    setMastered(currentQ);
+                  }}
                   className="px-6 py-2.5 text-white text-sm font-semibold rounded-xl transition-all"
                   style={{ background: 'var(--success)' }}
                 >
