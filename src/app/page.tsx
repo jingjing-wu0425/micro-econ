@@ -5,6 +5,8 @@ import { useStore } from '@/store/useStore';
 import { QUESTIONS, SECTIONS, TOTAL_QUESTIONS } from '@/lib/questions';
 import type { Evaluation, ChatMessage } from '@/types';
 
+const emptyEvals: Evaluation[] = [];
+
 export default function Home() {
   const currentQ = useStore((s) => s.currentQ);
   const answers = useStore((s) => s.answers);
@@ -24,7 +26,7 @@ export default function Home() {
   const question = QUESTIONS.find((q) => q.id === currentQ)!;
   const section = SECTIONS.find((s) => s.id === question.sectionId)!;
   const answer = answers[currentQ] ?? '';
-  const evals = useStore((s) => s.evaluations[currentQ] ?? []);
+  const evals = useStore((s) => s.evaluations[currentQ]) ?? emptyEvals;
   const isMastered = mastered[currentQ] ?? false;
 
   return (
